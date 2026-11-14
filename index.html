@@ -263,10 +263,11 @@ function stats(l){
   const left=Math.max(0,total-paid);
   return{items,pays,total,paid,left,overdue:od.reduce((s,i)=>s+i.AmountDue,0),odCount:od.length,next,pct:total?Math.min(100,paid/total*100):0,done:left<0.005};
 }
-function groups(dir){
+function groups(dir,which){
   const m={};
-  S.loans.filter(l=>l.Direction===dir).forEach(l=>{const p=partyOf(l.PartyID),g=m[l.PartyID]=m[l.PartyID]||{id:l.PartyID,name:p.Name,type:p.PartyType,loans:[],total:0,paid:0,left:0,overdue:0,odCount:0,next:null};
-    const s=stats(l);g.loans.push({l,s});g.total+=s.total;g.paid+=s.paid;g.left+=s.left;g.overdue+=s.overdue;g.odCount+=s.odCount;
+  S.loans.filter(l=>l.Direction===dir).forEach(l=>{const s=stats(l);if(which==='active'&&s.done)return;if(which==='done'&&!s.done)return;
+    const p=partyOf(l.PartyID),g=m[l.PartyID]=m[l.PartyID]||{id:l.PartyID,name:p.Name,type:p.PartyType,loans:[],total:0,paid:0,left:0,overdue:0,odCount:0,next:null};
+    g.loans.push({l,s});g.total+=s.total;g.paid+=s.paid;g.left+=s.left;g.overdue+=s.overdue;g.odCount+=s.odCount;
     if(s.next&&s.next.DueDate&&(!g.next||s.next.DueDate<g.next.DueDate))g.next=s.next;});
   return Object.values(m).sort((a,b)=>b.left-a.left);
 }
@@ -277,13 +278,13 @@ function status(i){if(i.IsPaid)return['ok','Paid'];if(!i.DueDate)return['plain',
 
 /* ---------- views ---------- */
 let tab='dash',dirFilter='ALL',openLoans=new Set(),stmtParty=null,payFor=null,lineFor=null,newDir='LENT';
-const TABS=[['dash','Dashboard','home'],['loans','Loans','list'],['rem','Reminders','bell'],['stmt','Statements','file']];
+const TABS=[['dash','Dashboard','home'],['loans','Loans','list'],['rem','Reminders','bell'],['done','Completed','check'],['stmt','Statements','file']];
 function render(){
   $('#nav').innerHTML=TABS.map(([k,n,i])=>`<button data-tab="${k}" class="${tab===k?'on':''}">${ic(i)}${n}</button>`).join('');
   $('#people').innerHTML=S.parties.map(p=>`<option value="${esc(p.Name)}">`).join('');
   const v=$('#view');
   if(mode==='none'){v.innerHTML=`<div class="card empty fade"><div style="font-size:42px">💸</div><h2 style="justify-content:center;font-size:20px">Welcome to Loan Tracker</h2><p>Connect to your Loan Tracker 2 sheet, or look around with sample data first.</p><button class="solid-btn" onclick="openSettings()">Connect</button></div>`;return;}
-  v.innerHTML=`<div class="fade">${({dash:vDash,loans:vLoans,rem:vRem,stmt:vStmt})[tab]()}</div>`;
+  v.innerHTML=`<div class="fade">${({dash:vDash,loans:vLoans,rem:vRem,done:vDone,stmt:vStmt})[tab]()}</div>`;
   requestAnimationFrame(()=>{document.querySelectorAll('.bar i').forEach(b=>b.style.width=b.dataset.w+'%');document.querySelectorAll('.b').forEach(b=>b.style.height=b.dataset.h+'%');document.querySelectorAll('[data-count]').forEach(countUp);document.querySelectorAll('.loan.open .lbody').forEach(b=>b.style.maxHeight=b.scrollHeight+'px');});
 }
 function countUp(el){const to=+el.dataset.count,t0=performance.now();const f=n=>{const p=Math.min(1,(n-t0)/900),e=1-Math.pow(1-p,3);el.textContent=peso0(to*e);if(p<1)requestAnimationFrame(f);};requestAnimationFrame(f);}
@@ -294,7 +295,7 @@ function vDash(){
   const months={};S.schedule.filter(s=>!s.IsPaid&&s.DueDate&&s.DueDate>=S.today.slice(0,7)).forEach(s=>{const l=S.loans.find(x=>x.LoanID===s.LoanID);if(!l)return;const k=s.DueDate.slice(0,7);months[k]=months[k]||{in:0,out:0};months[k][l.Direction==='LENT'?'in':'out']+=s.AmountDue;});
   const ks=Object.keys(months).sort().slice(0,8),mx=Math.max(1,...ks.map(k=>Math.max(months[k].in,months[k].out)));
   const chart=ks.length?`<div class="chart">${ks.map(k=>`<div class="col"><div class="pair"><div class="b in" title="In ${peso0(months[k].in)}" data-h="${months[k].in/mx*90}"></div><div class="b out" title="Out ${peso0(months[k].out)}" data-h="${months[k].out/mx*90}"></div></div><div class="m">${MON[+k.slice(5)-1]} ${k.slice(2,4)}</div></div>`).join('')}</div><div class="legend"><span><i style="background:var(--g)"></i>Coming in (they pay you)</span><span><i style="background:var(--vio)"></i>Going out (you pay the bank)</span></div>`:'<div class="empty">Nothing upcoming 🎉</div>';
-  const L=groups('LENT'),O=groups('BORROWED');
+  const L=groups('LENT','active'),O=groups('BORROWED','active');
   return `<div class="grid kpis">
     ${kp('g','wallet','Owed to you',T.left,`${peso0(T.paid)} collected of ${peso0(T.total)}`,'solid')}
     ${kp('r','alert','Overdue to you',T.overdue,`${T.odCount} late installment${T.odCount===1?'':'s'}`)}
@@ -327,11 +328,11 @@ function vLoans(){
   const chips=`<div class="chips noprint">${[['ALL','All'],['LENT','Owed to me'],['BORROWED','I owe']].map(([k,n])=>`<button class="mini ${dirFilter===k?'on':''}" data-filter="${k}">${n}</button>`).join('')}</div>`;
   const dirs=dirFilter==='ALL'?['LENT','BORROWED']:[dirFilter];
   let html='';
-  dirs.forEach(dir=>{const G=groups(dir);if(!G.length)return;
+  dirs.forEach(dir=>{const G=groups(dir,'active');if(!G.length)return;
     html+=`<h2 style="font-size:17px">${ic(dir==='LENT'?'users':'bank')} ${dir==='LENT'?'Owed to me':'I owe'}</h2>`;
     html+=G.map(g=>`<h2 id="p_${esc(g.id)}"><span class="avatar" style="width:28px;height:28px;border-radius:9px;font-size:13px;background:${colorOf(g.name,g.type)}">${esc((g.name||'?')[0]).toUpperCase()}</span>${esc(g.name)} <span class="pmeta">· ${peso0(g.left)} left</span>
       <button class="mini" style="margin-left:auto" data-rename="${esc(g.id)}" data-name="${esc(g.name)}">Rename</button></h2><div class="stack">${g.loans.map(({l,s})=>loanCard(l,s)).join('')}</div>`).join('');});
-  return chips+(html||'<div class="card empty">No loans yet — tap “+ Add loan”.</div>');
+  return chips+(html||'<div class="card empty">No open loans here 🎉 Fully paid loans are in the Completed tab.</div>');
 }
 function loanCard(l,s){
   const open=openLoans.has(l.LoanID),owe=l.Direction==='BORROWED';
@@ -356,6 +357,16 @@ function loanCard(l,s){
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="mini" data-addpay="${l.LoanID}">+ Payment</button><button class="mini" data-addline="${l.LoanID}">+ Charge / line</button>
         ${owe?'':`<button class="mini" data-stmt="${esc(l.PartyID)}">Statement</button>`}<span class="grow"></span><button class="mini red" data-delloan="${l.LoanID}">Delete loan</button></div>
     </div></div></div>`;
+}
+
+function vDone(){
+  let html='',count=0,sum=0;
+  ['LENT','BORROWED'].forEach(dir=>{const G=groups(dir,'done');if(!G.length)return;
+    G.forEach(g=>{count+=g.loans.length;sum+=g.paid;});
+    html+=`<h2 style="font-size:17px">${ic(dir==='LENT'?'users':'bank')} ${dir==='LENT'?'Fully collected':'Fully paid off (I owed)'}</h2>`;
+    html+=G.map(g=>`<h2><span class="avatar" style="width:28px;height:28px;border-radius:9px;font-size:13px;background:${colorOf(g.name,g.type)}">${esc((g.name||'?')[0]).toUpperCase()}</span>${esc(g.name)} <span class="pmeta">· ${g.loans.length} loan${g.loans.length>1?'s':''} · ${peso0(g.paid)} paid</span></h2><div class="stack">${g.loans.map(({l,s})=>loanCard(l,s)).join('')}</div>`).join('');});
+  if(!html)return '<div class="card empty">No completed loans yet.</div>';
+  return `<div class="grid kpis">${kp('g','check','Completed loans',0,'Every installment paid','solid').replace('data-count="0">₱0',`>${count}`)}${kp('b','wallet','Total settled',sum,'Across all completed loans')}</div>`+html;
 }
 
 function vRem(){
