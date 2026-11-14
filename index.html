@@ -101,8 +101,8 @@ tr.paid td{color:var(--mute)} tr.paid .amt{text-decoration:line-through}
 .chart{display:flex;align-items:flex-end;gap:8px;height:190px;padding-top:10px}
 .col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
 .pair{display:flex;gap:3px;align-items:flex-end;height:100%;width:100%;justify-content:center}
-.b{width:46%;max-width:22px;border-radius:7px 7px 3px 3px;height:0;transition:height 1s var(--ease)}
-.b.in{background:linear-gradient(180deg,#18b97f,var(--g2))}.b.out{background:linear-gradient(180deg,#9a73e6,var(--vio))}
+.col .b{width:70%;max-width:40px;border-radius:7px 7px 3px 3px;height:0;transition:height 1s var(--ease)}
+.col .b.in{background:linear-gradient(180deg,#18b97f,var(--g2))}.col .b.out{background:linear-gradient(180deg,#9a73e6,var(--vio))}
 .col .m{font-size:11px;color:var(--mute);margin-top:6px;font-weight:600}
 .legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin-top:8px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
@@ -156,8 +156,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--g);box-shadow:0 0 0 4
 <!-- Add loan -->
 <div class="scrim" id="mAdd"><div class="modal">
   <h3>Add a loan</h3>
-  <label>Direction</label>
-  <div class="seg" id="fDir"><button data-dir="LENT" class="on">I lent money (they owe me)</button><button data-dir="BORROWED">I borrowed (I owe them)</button></div>
+  <label style="display:none">Direction</label>
+  <div class="seg" id="fDir" style="display:none"><button data-dir="LENT" class="on">I lent money (they owe me)</button><button data-dir="BORROWED">I borrowed (I owe them)</button></div>
   <div class="row2">
     <div><label>Name</label><input id="fB" list="people" placeholder="e.g. Charlotte / BDO"><datalist id="people"></datalist></div>
     <div><label>Type</label><select id="fPT"><option>Person</option><option>Bank</option><option>Office</option></select></div>
@@ -240,7 +240,9 @@ async function api(action,data={}){
   const r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,pin:cfg.pin,...data})});
   const j=await r.json(); if(!j.ok)throw new Error(j.error||'Request failed'); return j;
 }
-function apply(j){S={parties:j.parties,loans:j.loans,schedule:j.schedule.map(s=>({...s,IsPaid:s.IsPaid===true||String(s.IsPaid).toUpperCase()==='TRUE',AmountDue:+s.AmountDue||0})),payments:j.payments.map(p=>({...p,Amount:+p.Amount||0})),today:j.today||todayISO()};render();}
+const HIDE_BORROWED=true; // bank dues are kept in the sheet but not shown in the app
+function apply(j){const keep=new Set(j.loans.filter(l=>!(HIDE_BORROWED&&l.Direction==='BORROWED')).map(l=>l.LoanID));j={...j,loans:j.loans.filter(l=>keep.has(l.LoanID)),schedule:j.schedule.filter(s=>keep.has(s.LoanID)),payments:j.payments.filter(p=>keep.has(p.LoanID))};
+  S={parties:j.parties,loans:j.loans,schedule:j.schedule.map(s=>({...s,IsPaid:s.IsPaid===true||String(s.IsPaid).toUpperCase()==='TRUE',AmountDue:+s.AmountDue||0})),payments:j.payments.map(p=>({...p,Amount:+p.Amount||0})),today:j.today||todayISO()};render();}
 async function load(){
   if(mode==='none')return render();
   busy(1);$('#sub').textContent='Syncing…';
@@ -285,7 +287,7 @@ function render(){
   const v=$('#view');
   if(mode==='none'){v.innerHTML=`<div class="card empty fade"><div style="font-size:42px">💸</div><h2 style="justify-content:center;font-size:20px">Welcome to Loan Tracker</h2><p>Connect to your Loan Tracker 2 sheet, or look around with sample data first.</p><button class="solid-btn" onclick="openSettings()">Connect</button></div>`;return;}
   v.innerHTML=`<div class="fade">${({dash:vDash,loans:vLoans,rem:vRem,done:vDone,stmt:vStmt})[tab]()}</div>`;
-  requestAnimationFrame(()=>{document.querySelectorAll('.bar i').forEach(b=>b.style.width=b.dataset.w+'%');document.querySelectorAll('.b').forEach(b=>b.style.height=b.dataset.h+'%');document.querySelectorAll('[data-count]').forEach(countUp);document.querySelectorAll('.loan.open .lbody').forEach(b=>b.style.maxHeight=b.scrollHeight+'px');});
+  requestAnimationFrame(()=>{document.querySelectorAll('.bar i').forEach(b=>b.style.width=b.dataset.w+'%');document.querySelectorAll('.col .b').forEach(b=>b.style.height=b.dataset.h+'%');document.querySelectorAll('[data-count]').forEach(countUp);document.querySelectorAll('.loan.open .lbody').forEach(b=>b.style.maxHeight=b.scrollHeight+'px');});
 }
 function countUp(el){const to=+el.dataset.count,t0=performance.now();const f=n=>{const p=Math.min(1,(n-t0)/900),e=1-Math.pow(1-p,3);el.textContent=peso0(to*e);if(p<1)requestAnimationFrame(f);};requestAnimationFrame(f);}
 const kp=(cls,icn,lab,val,cap,extra='')=>`<div class="card kpi hov ${extra}"><div class="ic ${cls}">${ic(icn)}</div><div class="lab">${lab}</div><div class="num" data-count="${val}">${peso0(val)}</div><div class="cap">${cap}</div></div>`;
@@ -294,18 +296,18 @@ function vDash(){
   const T=totals('LENT'),B=totals('BORROWED');
   const months={};S.schedule.filter(s=>!s.IsPaid&&s.DueDate&&s.DueDate>=S.today.slice(0,7)).forEach(s=>{const l=S.loans.find(x=>x.LoanID===s.LoanID);if(!l)return;const k=s.DueDate.slice(0,7);months[k]=months[k]||{in:0,out:0};months[k][l.Direction==='LENT'?'in':'out']+=s.AmountDue;});
   const ks=Object.keys(months).sort().slice(0,8),mx=Math.max(1,...ks.map(k=>Math.max(months[k].in,months[k].out)));
-  const chart=ks.length?`<div class="chart">${ks.map(k=>`<div class="col"><div class="pair"><div class="b in" title="In ${peso0(months[k].in)}" data-h="${months[k].in/mx*90}"></div><div class="b out" title="Out ${peso0(months[k].out)}" data-h="${months[k].out/mx*90}"></div></div><div class="m">${MON[+k.slice(5)-1]} ${k.slice(2,4)}</div></div>`).join('')}</div><div class="legend"><span><i style="background:var(--g)"></i>Coming in (they pay you)</span><span><i style="background:var(--vio)"></i>Going out (you pay the bank)</span></div>`:'<div class="empty">Nothing upcoming 🎉</div>';
+  const chart=ks.length?`<div class="chart">${ks.map(k=>`<div class="col"><div class="pair"><div class="b in" title="In ${peso0(months[k].in)}" data-h="${months[k].in/mx*90}"></div></div><div class="m">${MON[+k.slice(5)-1]} ${k.slice(2,4)}</div></div>`).join('')}</div><div class="legend"><span><i style="background:var(--g)"></i>Coming in (they pay you)</span></div>`:'<div class="empty">Nothing upcoming 🎉</div>';
   const L=groups('LENT','active'),O=groups('BORROWED','active');
   return `<div class="grid kpis">
     ${kp('g','wallet','Owed to you',T.left,`${peso0(T.paid)} collected of ${peso0(T.total)}`,'solid')}
     ${kp('r','alert','Overdue to you',T.overdue,`${T.odCount} late installment${T.odCount===1?'':'s'}`)}
     ${kp('a','clock','Coming in · 30 days',T.month,'Due to you in the next 30 days')}
-    ${kp('v','bank','You owe (banks)',B.left,`${peso0(B.month)} due in the next 30 days`,'owe')}
+    ${kp('b','check','Collected so far',T.paid,`${T.total?Math.round(T.paid/T.total*100):0}% of ${peso0(T.total)}`)}
   </div>
   <div class="grid two" style="margin-top:6px">
     <div><h2>${ic('users')} Who owes you</h2><div class="stack">${L.length?L.map(g=>groupCard(g,'LENT')).join(''):'<div class="card empty">No loans yet.</div>'}</div>
       ${O.length?`<h2>${ic('bank')} Who you owe</h2><div class="stack">${O.map(g=>groupCard(g,'BORROWED')).join('')}</div>`:''}</div>
-    <div><h2>${ic('chart')} Money in vs out, by month</h2><div class="card">${chart}</div>
+    <div><h2>${ic('chart')} Money coming in, by month</h2><div class="card">${chart}</div>
       <h2>${ic('bell')} Next up</h2><div class="stack">${nextUp()}</div></div>
   </div>`;
 }
@@ -325,7 +327,7 @@ function remRow(i){
 }
 
 function vLoans(){
-  const chips=`<div class="chips noprint">${[['ALL','All'],['LENT','Owed to me'],['BORROWED','I owe']].map(([k,n])=>`<button class="mini ${dirFilter===k?'on':''}" data-filter="${k}">${n}</button>`).join('')}</div>`;
+  const chips=HIDE_BORROWED?'':`<div class="chips noprint">${[['ALL','All'],['LENT','Owed to me'],['BORROWED','I owe']].map(([k,n])=>`<button class="mini ${dirFilter===k?'on':''}" data-filter="${k}">${n}</button>`).join('')}</div>`;
   const dirs=dirFilter==='ALL'?['LENT','BORROWED']:[dirFilter];
   let html='';
   dirs.forEach(dir=>{const G=groups(dir,'active');if(!G.length)return;
@@ -337,7 +339,7 @@ function vLoans(){
 function loanCard(l,s){
   const open=openLoans.has(l.LoanID),owe=l.Direction==='BORROWED';
   const pill=s.done?'<span class="pill ok">Paid off</span>':(s.odCount?`<span class="pill late">${s.odCount} late</span>`:'<span class="pill ok">On track</span>');
-  const links=String(l.LinkedLoanID||'').split(',').map(x=>x.trim()).filter(Boolean);
+  const links=String(l.LinkedLoanID||'').split(',').map(x=>x.trim()).filter(x=>x&&S.loans.some(o=>o.LoanID===x));
   const facts=[['Loan ID',l.LoanID],['Principal',l.Principal?peso(l.Principal):'—'],['Interest',l.InterestRate!==''&&l.InterestRate!=null?`${l.InterestRate}% ${l.RateBasis||''}`:'—'],['Term',l.Term?`${l.Term} ${l.TermUnit||''}`:'—'],['Monthly',l.Amortization?peso(l.Amortization):'—'],['Total due',peso(s.total)],['Paid',peso(s.paid)],['Source',l.SourceTab||'—']];
   const ledger=l.LoanType==='Ledger';
   return `<div class="card loan ${open?'open':''}">
@@ -374,8 +376,8 @@ function vRem(){
   const dirOf=s=>(S.loans.find(l=>l.LoanID===s.LoanID)||{}).Direction;
   const inc=open.filter(s=>dirOf(s)==='LENT'),out=open.filter(s=>dirOf(s)==='BORROWED');
   const sec=(t,i,arr,e)=>`<h2>${ic(i)} ${t} <span class="pill plain">${arr.length}</span></h2>${arr.length?arr.map(remRow).join(''):`<div class="card empty">${e}</div>`}`;
-  return `<div class="grid two"><div>${sec('Overdue — collect now','alert',inc.filter(s=>s.DueDate<S.today),'Nothing overdue 🎉')}${sec('Due to you in 7 days','clock',inc.filter(s=>s.DueDate>=S.today&&diff(s.DueDate,S.today)<=7),'Nothing this week.')}${sec('Later','bell',inc.filter(s=>diff(s.DueDate,S.today)>7).slice(0,12),'Nothing later.')}</div>
-    <div>${sec('You need to pay (banks)','bank',out.filter(s=>diff(s.DueDate,S.today)<=31).slice(0,15),'No bank payments due this month.')}</div></div>`;
+  return `<div class="grid two"><div>${sec('Overdue — collect now','alert',inc.filter(s=>s.DueDate<S.today),'Nothing overdue 🎉')}${sec('Due to you in 7 days','clock',inc.filter(s=>s.DueDate>=S.today&&diff(s.DueDate,S.today)<=7),'Nothing this week.')}</div>
+    <div>${sec('Later','bell',inc.filter(s=>diff(s.DueDate,S.today)>7).slice(0,12),'Nothing later.')}</div></div>`;
 }
 
 function vStmt(){
