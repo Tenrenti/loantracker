@@ -205,6 +205,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--g);box-shadow:0 0 0 4
 </div></div>
 
 <div class="toast" id="toast"></div>
+<input type="file" id="proofFile" accept="image/*,application/pdf" style="display:none" onchange="uploadProof(this.files[0])">
 
 <script>
 /* ---------- helpers ---------- */
@@ -243,7 +244,9 @@ async function load(){
   catch(e){$('#sub').textContent='Not connected';toast(e.message);if(mode==='live')openSettings();}
   busy(0);
 }
-async function act(action,data,msg){busy(1);try{apply(await api(action,data));if(msg)toast(msg);}catch(e){toast('Error: '+e.message);render();}busy(0);}
+async function act(action,data,msg){busy(1);try{const j=await api(action,data);apply(j);
+  if(msg){let m=msg;if(j.synced&&/^[A-Za-z]/.test(j.synced)&&!/^(not|skipped|sync)/.test(j.synced))m+=' · also ticked in Loans sa akin ('+j.synced+')';else if(j.synced&&/^sync failed/.test(j.synced))m+=' · ⚠ '+j.synced;toast(m);}}
+  catch(e){toast('Error: '+e.message);render();}busy(0);}
 
 /* ---------- calculations ---------- */
 const partyOf=id=>S.parties.find(p=>p.PartyID===id)||{Name:'?',PartyType:'Person'};
@@ -344,8 +347,8 @@ function loanCard(l,s){
       <div class="tbl"><table><tr><th></th><th>#</th><th>Due</th><th class="r">Amount</th><th>Status</th><th>Paid on</th><th>Remark</th><th></th></tr>
       ${s.items.map(i=>{const[k,t]=status(i);return `<tr class="${i.IsPaid?'paid':''}"><td style="width:34px">${ledger?'':`<button class="chk ${i.IsPaid?'on':''}" data-pay="${i.ScheduleID}" data-paid="${i.IsPaid?1:0}">${ic('check')}</button>`}</td>
         <td>${esc(i.InstallmentNo)}</td><td>${fmtD(i.DueDate)}</td><td class="r amt">${peso(i.AmountDue)}</td><td><span class="pill ${k}">${t}</span></td><td>${fmtD(i.PaidDate)}</td><td class="pmeta">${esc(i.Remark)}</td>
-        <td class="r"><button class="mini red" data-delline="${i.ScheduleID}" title="Delete line">✕</button></td></tr>`}).join('')}</table></div>
-      ${s.pays.length?`<h2 style="margin:18px 0 8px;font-size:13px">Payments (${s.pays.length})</h2><div class="tbl"><table><tr><th>ID</th><th>Date</th><th class="r">Amount</th><th>Remark</th><th></th></tr>${s.pays.map(p=>`<tr><td>${esc(p.PaymentID)}</td><td>${fmtD(p.PaymentDate)}</td><td class="r">${peso(p.Amount)}</td><td class="pmeta">${esc(p.Remark)}${p.ScheduleID?' · for '+esc(p.ScheduleID):''}</td><td class="r">${p.ScheduleID?'':`<button class="mini red" data-delpay="${p.PaymentID}">✕</button>`}</td></tr>`).join('')}</table></div>`:''}
+        <td class="r" style="white-space:nowrap">${i.IsPaid?proofBtn(S.payments.find(p=>p.ScheduleID===i.ScheduleID)):''} <button class="mini red" data-delline="${i.ScheduleID}" title="Delete line">✕</button></td></tr>`}).join('')}</table></div>
+      ${s.pays.length?`<h2 style="margin:18px 0 8px;font-size:13px">Payments (${s.pays.length})</h2><div class="tbl"><table><tr><th>ID</th><th>Date</th><th class="r">Amount</th><th>Remark</th><th>Proof</th><th></th></tr>${s.pays.map(p=>`<tr><td>${esc(p.PaymentID)}</td><td>${fmtD(p.PaymentDate)}</td><td class="r">${peso(p.Amount)}</td><td class="pmeta">${esc(p.Remark)}${p.ScheduleID?' · for '+esc(p.ScheduleID):''}</td><td style="white-space:nowrap">${proofBtn(p,true)}</td><td class="r">${p.ScheduleID?'':`<button class="mini red" data-delpay="${p.PaymentID}">✕</button>`}</td></tr>`).join('')}</table></div>`:''}
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="mini" data-addpay="${l.LoanID}">+ Payment</button><button class="mini" data-addline="${l.LoanID}">+ Charge / line</button>
         ${owe?'':`<button class="mini" data-stmt="${esc(l.PartyID)}">Statement</button>`}<span class="grow"></span><button class="mini red" data-delloan="${l.LoanID}">Delete loan</button></div>
     </div></div></div>`;
@@ -379,6 +382,28 @@ function stmtText(){const g=groups('LENT').find(x=>x.id===stmtParty);if(!g)retur
   const up=S.schedule.filter(s=>!s.IsPaid&&s.DueDate&&ids.includes(s.LoanID)).sort((a,b)=>a.DueDate<b.DueDate?-1:1);
   return `Hi ${g.name}, here's your statement as of ${fmtD(S.today)}:\nTotal: ${peso(g.total)}\nPaid: ${peso(g.paid)}\nBalance: ${peso(g.left)}${g.overdue?`\nOverdue: ${peso(g.overdue)}`:''}\n\nNext payments:\n`+(up.slice(0,8).map(i=>`• ${fmtD(i.DueDate)} — ${peso(i.AmountDue)}`).join('\n')||'• None — fully paid. Salamat!');}
 
+/* ---------- proofs ---------- */
+function proofBtn(p,withRemove){
+  if(!p)return '';
+  if(p.ProofURL)return `<a class="mini" style="text-decoration:none;color:var(--g2)" href="${esc(p.ProofURL)}" target="_blank" rel="noopener" title="Open proof in Google Drive">🧾 Proof</a>${withRemove?` <button class="mini red" data-unproof="${esc(p.PaymentID)}" title="Detach proof">✕</button>`:''}`;
+  return `<button class="mini" data-proof="${esc(p.PaymentID)}" title="Upload a photo or PDF as proof">📎 Proof</button>`;
+}
+let proofFor=null;
+function pickProof(pid){proofFor=pid;const f=$('#proofFile');f.value='';f.click();}
+function shrinkImage(file){return new Promise((res,rej)=>{const img=new Image(),url=URL.createObjectURL(file);img.onload=()=>{const max=1600,k=Math.min(1,max/Math.max(img.width,img.height));const cv=document.createElement('canvas');cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);URL.revokeObjectURL(url);res(cv.toDataURL('image/jpeg',0.82));};img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('Could not read the image'));};img.src=url;});}
+function readAsDataURL(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(file);});}
+async function uploadProof(file){
+  if(!file||!proofFor)return;
+  if(mode==='demo'){const p=D.payments.find(x=>x.PaymentID===proofFor);if(p)p.ProofURL='https://drive.google.com/';apply({ok:true,today:todayISO(),...JSON.parse(JSON.stringify(D))});return toast('Demo: proof attached (not really uploaded)');}
+  try{
+    toast('Uploading proof…');
+    let data,mime=file.type||'application/octet-stream',name=file.name||'proof';
+    if(/^image\/(jpeg|png|webp|heic|heif)/i.test(mime)&&!/heic|heif/i.test(mime)){data=await shrinkImage(file);mime='image/jpeg';name=name.replace(/\.\w+$/,'')+'.jpg';}
+    else{if(file.size>12*1024*1024)return toast('File is too big (max 12 MB)');data=await readAsDataURL(file);}
+    await act('uploadProof',{paymentId:proofFor,name,mime,data},'Proof uploaded ✓');
+  }catch(e){toast('Upload failed: '+e.message);}
+}
+
 /* ---------- modals & events ---------- */
 function openM(s){document.querySelector(s).classList.add('on');}
 function closeM(){document.querySelectorAll('.scrim').forEach(m=>m.classList.remove('on'));}
@@ -395,6 +420,8 @@ document.addEventListener('click',async e=>{
   if(d.toggle){const c=t.closest('.loan'),b=c.querySelector('.lbody');if(openLoans.has(d.toggle)){openLoans.delete(d.toggle);c.classList.remove('open');b.style.maxHeight=0;}else{openLoans.add(d.toggle);c.classList.add('open');b.style.maxHeight=b.scrollHeight+'px';}return;}
   if(d.pay){const on=d.paid==='1';t.classList.add('busy');return act('setPaid',{id:d.pay,paid:!on,date:todayISO()},on?'Marked unpaid':'Payment recorded ✓');}
   if(d.delline){if(confirm('Delete this line (and its payment, if any)?'))act('deleteLine',{id:d.delline},'Line deleted');return;}
+  if(d.proof){return pickProof(d.proof);}
+  if(d.unproof){if(confirm('Detach this proof? (The file stays in your Google Drive.)'))act('removeProof',{paymentId:d.unproof},'Proof detached');return;}
   if(d.delpay){if(confirm('Delete this payment?'))act('deletePayment',{id:d.delpay},'Payment deleted');return;}
   if(d.delloan){if(confirm('Delete this whole loan, its schedule and payments? This cannot be undone.'))act('deleteLoan',{id:d.delloan},'Loan deleted');return;}
   if(d.addpay){payFor=d.addpay;$('#yD').value=todayISO();$('#yA').value='';$('#yR').value='';return openM('#mPay');}
@@ -447,7 +474,7 @@ function demoSeed(){
   const mk=(n,ty,dir,purpose,P,k,rate,off,paidN,link)=>{const id='L'+String(++lc).padStart(3,'0');const per=+(P*(1+rate/100*k)/k).toFixed(2);const start=addMonths(t,off);
     D.loans.push({LoanID:id,PartyID:party(n,ty),Direction:dir,LoanType:'Installment',Purpose:purpose,Principal:P,InterestRate:rate,RateBasis:'per month',Term:k,TermUnit:'months',Amortization:per,StartDate:start,LinkedLoanID:link||'',SourceTab:'demo',SourceCell:'',Notes:''});
     for(let i=0;i<k;i++){const sid='S'+String(++sc).padStart(4,'0'),due=addMonths(start,i),p=i<paidN;D.schedule.push({ScheduleID:sid,LoanID:id,InstallmentNo:i+1,DueDate:due,AmountDue:per,IsPaid:p,PaidDate:p?due:'',Remark:''});
-      if(p)D.payments.push({PaymentID:'PM'+String(++mc).padStart(4,'0'),LoanID:id,ScheduleID:sid,PaymentDate:due,Amount:per,Remark:''});}return id;};
+      if(p)D.payments.push({PaymentID:'PM'+String(++mc).padStart(4,'0'),LoanID:id,ScheduleID:sid,PaymentDate:due,Amount:per,Remark:'',ProofURL:''});}return id;};
   const a=mk('Juan Dela Cruz','Person','LENT','Business capital',25000,6,2,-4,3);
   const b=mk('Maria Santos','Person','LENT','Housing',300000,18,0.9,-3,3);
   const c=mk('Sample Bank','Bank','BORROWED','Funds Maria\'s housing loan',300000,18,0.5,-3,3,b);D.loans.find(l=>l.LoanID===b).LinkedLoanID=c;
