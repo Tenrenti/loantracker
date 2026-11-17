@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Loan Tracker</title>
-<link rel="icon" type="image/png" href="icon.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon.png?v=2">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <meta name="apple-mobile-web-app-title" content="Loan Tracker">
 <meta name="theme-color" content="#0f9d6b">
 <style>
@@ -131,6 +131,23 @@ input:focus,select:focus,textarea:focus{border-color:var(--g);box-shadow:0 0 0 4
 @keyframes fade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 .stack>*+*{margin-top:12px}
 .loader{position:fixed;top:0;left:0;height:3px;width:0;background:#fff;z-index:60;transition:width .6s var(--ease),opacity .4s}
+td.nw,.nw{white-space:nowrap}.ds{display:none}
+@media(max-width:560px){
+  .lbody-in{padding:0 10px 14px}
+  .lbody table{font-size:12.5px}
+  .lbody th{font-size:9.5px;padding:6px 3px;letter-spacing:.4px}
+  .lbody td{padding:7px 3px}
+  .lbody td.no{color:var(--mute);width:18px}
+  .lbody .pill{font-size:10px;padding:2px 7px}
+  .lbody .chk{width:19px;height:19px;border-radius:6px}
+  .lbody .chk svg{width:12px;height:12px}
+  .lbody td:first-child{width:24px!important}
+  .lbody .rm{display:none}
+  .lbody .mini{padding:5px 8px;font-size:11.5px}
+  .dl{display:none}.ds{display:inline}
+  .facts .fact{font-size:11px;padding:5px 8px}.facts .fact b{font-size:12.5px}
+  .pname{font-size:15px}.pmeta{font-size:11.5px}
+}
 @media(max-width:560px){.num{font-size:26px}.row2{grid-template-columns:1fr}.pamt{font-size:15px}.hbtn{padding:8px 11px;font-size:13px}}
 @media print{body{background:#fff}header,nav,.noprint,.toast{display:none!important}.paper{border:0;box-shadow:none;padding:0;max-width:none}}
 </style>
@@ -141,7 +158,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--g);box-shadow:0 0 0 4
   <svg class="lines" viewBox="0 0 1100 200" preserveAspectRatio="none"><path d="M0 150 C 200 60, 350 200, 550 110 S 900 30, 1100 120"/><path d="M0 100 C 180 180, 380 20, 580 90 S 920 190, 1100 60"/></svg>
   <div class="wrap" style="padding-bottom:0">
     <div class="top">
-      <div class="logo"><img src="icon.png" alt="Loan Tracker" width="38" height="38" style="display:block"></div>
+      <div class="logo" style="background:none;overflow:hidden"><img src="icon.png?v=2" alt="Loan Tracker" width="46" height="46" style="display:block;width:46px;height:46px"></div>
       <div><h1>Loan Tracker</h1><div class="sub" id="sub">Not connected</div></div>
       <div class="grow"></div>
       <button class="hbtn ghost" id="btnRefresh">Refresh</button>
@@ -202,7 +219,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--g);box-shadow:0 0 0 4
 <!-- Settings -->
 <div class="scrim" id="mSet"><div class="modal">
   <h3>Connect to Loan Tracker 2</h3>
-  <div style="font-size:13.5px;color:var(--mute)">Paste the Apps Script web-app link (ends in <b>/exec</b>) and your PIN. The <b>first</b> PIN you use becomes your PIN. Both are saved only in this browser — never on GitHub.</div>
+  <div style="font-size:13.5px;color:var(--mute)">Paste the Apps Script web-app link (ends in <b>/exec</b>) and your PIN. The <b>first</b> PIN you use becomes your PIN. Both (and a saved copy of your loans, so the app opens instantly) are kept only in this browser — never on GitHub. “Forget on this device” erases them.</div>
   <label>Web app URL</label><input id="sU" placeholder="https://script.google.com/macros/s/.../exec">
   <label>PIN</label><input id="sP" type="password" placeholder="At least 4 characters">
   <div class="actions"><button class="mini" id="btnLogout">Forget on this device</button><button class="mini" id="btnDemo">Try demo data</button><button class="solid-btn" id="saveSet">Connect</button></div>
@@ -219,6 +236,8 @@ const peso=n=>'₱'+Number(n||0).toLocaleString('en-PH',{minimumFractionDigits:2
 const peso0=n=>'₱'+Math.round(Number(n||0)).toLocaleString('en-PH');
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const fmtD=iso=>{if(!iso)return '—';const[y,m,d]=String(iso).split('-').map(Number);return m?`${MON[m-1]} ${d}, ${y}`:iso;};
+function dd(iso,ref){if(!iso)return '—';const[y,m,d]=String(iso).split('-').map(Number);if(!m)return esc(iso);
+  const sameYr=ref&&String(ref).slice(0,4)===String(y);return `<span class="dl">${MON[m-1]} ${d}, ${y}</span><span class="ds">${MON[m-1]} ${d}${sameYr?'':' \''+String(y).slice(2)}</span>`;}
 const diff=(a,b)=>Math.round((Date.parse(a)-Date.parse(b))/864e5);
 const todayISO=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);};
 const addDays=(iso,n)=>{const d=new Date(iso+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
@@ -241,13 +260,27 @@ async function api(action,data={}){
   const j=await r.json(); if(!j.ok)throw new Error(j.error||'Request failed'); return j;
 }
 const HIDE_BORROWED=true; // bank dues are kept in the sheet but not shown in the app
-function apply(j){const keep=new Set(j.loans.filter(l=>!(HIDE_BORROWED&&l.Direction==='BORROWED')).map(l=>l.LoanID));j={...j,loans:j.loans.filter(l=>keep.has(l.LoanID)),schedule:j.schedule.filter(s=>keep.has(s.LoanID)),payments:j.payments.filter(p=>keep.has(p.LoanID))};
+/* ---------- saved copy (cache) so the app opens instantly ---------- */
+const CACHE_KEY='lt2_cache_v1';
+function saveCache(j){if(mode!=='live')return;try{localStorage.setItem(CACHE_KEY,JSON.stringify({t:Date.now(),url:cfg.url,j}));}catch(e){}}
+function readCache(){try{const c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');return c&&c.url===cfg.url&&c.j&&c.j.ok?c:null;}catch(e){return null;}}
+function ago(t){const m=Math.round((Date.now()-t)/6e4);return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' d ago';}
+function apply(j){saveCache(j);return applyView(j);}
+function applyView(j){const keep=new Set(j.loans.filter(l=>!(HIDE_BORROWED&&l.Direction==='BORROWED')).map(l=>l.LoanID));j={...j,loans:j.loans.filter(l=>keep.has(l.LoanID)),schedule:j.schedule.filter(s=>keep.has(s.LoanID)),payments:j.payments.filter(p=>keep.has(p.LoanID))};
   S={parties:j.parties,loans:j.loans,schedule:j.schedule.map(s=>({...s,IsPaid:s.IsPaid===true||String(s.IsPaid).toUpperCase()==='TRUE',AmountDue:+s.AmountDue||0})),payments:j.payments.map(p=>({...p,Amount:+p.Amount||0})),today:j.today||todayISO()};render();}
 async function load(){
   if(mode==='none')return render();
-  busy(1);$('#sub').textContent='Syncing…';
-  try{apply(await api('list'));$('#sub').textContent=mode==='demo'?'Demo mode — sample data, nothing is saved':'Live — synced with Loan Tracker 2';}
-  catch(e){$('#sub').textContent='Not connected';toast(e.message);if(mode==='live')openSettings();}
+  // 1) show the saved copy right away (no waiting)
+  const cached=mode==='live'?readCache():null;
+  if(cached&&!S.loans.length){applyView(cached.j);$('#sub').textContent='Saved copy from '+ago(cached.t)+' · updating…';}
+  else $('#sub').textContent='Syncing…';
+  // 2) quietly get the latest from Google Sheets in the background
+  busy(1);
+  try{apply(await api('list'));$('#sub').textContent=mode==='demo'?'Demo mode — sample data, nothing is saved':'Live — updated just now';}
+  catch(e){
+    if(cached&&!/PIN/i.test(e.message)){$('#sub').textContent='Offline — showing saved copy from '+ago(cached.t);toast('Could not reach the sheet. Showing your saved copy.');}
+    else{$('#sub').textContent='Not connected';toast(e.message);if(mode==='live')openSettings();}
+  }
   busy(0);
 }
 async function act(action,data,msg){busy(1);try{const j=await api(action,data);apply(j);
@@ -351,12 +384,12 @@ function loanCard(l,s){
     <div class="lbody"><div class="lbody-in">
       <div class="facts">${facts.map(([a,b])=>`<div class="fact">${a}<b>${esc(b)}</b></div>`).join('')}</div>
       ${l.Notes?`<div class="pmeta" style="margin-bottom:10px">📝 ${esc(l.Notes)}</div>`:''}
-      <div class="tbl"><table><tr><th></th><th>#</th><th>Due</th><th class="r">Amount</th><th>Status</th><th>Paid on</th><th>Remark</th><th></th></tr>
+      <div class="tbl"><table><tr><th></th><th>#</th><th>Due</th><th class="r">Amount</th><th>Status</th><th>Paid on</th><th class="rm">Remark</th><th></th></tr>
       ${s.items.map(i=>{const[k,t]=status(i);return `<tr class="${i.IsPaid?'paid':''}"><td style="width:34px">${ledger?'':`<button class="chk ${i.IsPaid?'on':''}" data-pay="${i.ScheduleID}" data-paid="${i.IsPaid?1:0}">${ic('check')}</button>`}</td>
-        <td>${esc(i.InstallmentNo)}</td><td>${fmtD(i.DueDate)}</td><td class="r amt">${peso(i.AmountDue)}</td><td><span class="pill ${k}">${t}</span></td><td>${fmtD(i.PaidDate)}</td><td class="pmeta">${esc(i.Remark)}</td>
+        <td class="no">${esc(i.InstallmentNo)}</td><td class="nw">${dd(i.DueDate)}</td><td class="r amt nw">${peso(i.AmountDue)}</td><td class="nw"><span class="pill ${k}">${t}</span></td><td class="nw">${dd(i.PaidDate,i.DueDate)}</td><td class="pmeta rm">${esc(i.Remark)}</td>
         <td class="r" style="white-space:nowrap">${i.IsPaid?proofBtn(S.payments.find(p=>p.ScheduleID===i.ScheduleID)):''} <button class="mini red" data-delline="${i.ScheduleID}" title="Delete line">✕</button></td></tr>`}).join('')}</table></div>
       ${s.pays.length?`<h2 style="margin:18px 0 8px;font-size:13px">Payments (${s.pays.length})</h2><div class="tbl"><table><tr><th>ID</th><th>Date</th><th class="r">Amount</th><th>Remark</th><th>Proof</th><th></th></tr>${s.pays.map(p=>`<tr><td>${esc(p.PaymentID)}</td><td>${fmtD(p.PaymentDate)}</td><td class="r">${peso(p.Amount)}</td><td class="pmeta">${esc(p.Remark)}${p.ScheduleID?' · for '+esc(p.ScheduleID):''}</td><td style="white-space:nowrap">${proofBtn(p,true)}</td><td class="r">${p.ScheduleID?'':`<button class="mini red" data-delpay="${p.PaymentID}">✕</button>`}</td></tr>`).join('')}</table></div>`:''}
-      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="mini" data-addpay="${l.LoanID}">+ Payment</button><button class="mini" data-addline="${l.LoanID}">+ Charge / line</button>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="mini" data-addpay="${l.LoanID}">+ Payment</button><button class="mini" data-addline="${l.LoanID}">+ Charge / line</button><button class="mini" data-photo="${l.LoanID}" style="color:var(--g2)">📸 Save as photo</button>
         ${owe?'':`<button class="mini" data-stmt="${esc(l.PartyID)}">Statement</button>`}<span class="grow"></span><button class="mini red" data-delloan="${l.LoanID}">Delete loan</button></div>
     </div></div></div>`;
 }
@@ -399,6 +432,55 @@ function stmtText(){const g=groups('LENT').find(x=>x.id===stmtParty);if(!g)retur
   const up=S.schedule.filter(s=>!s.IsPaid&&s.DueDate&&ids.includes(s.LoanID)).sort((a,b)=>a.DueDate<b.DueDate?-1:1);
   return `Hi ${g.name}, here's your statement as of ${fmtD(S.today)}:\nTotal: ${peso(g.total)}\nPaid: ${peso(g.paid)}\nBalance: ${peso(g.left)}${g.overdue?`\nOverdue: ${peso(g.overdue)}`:''}\n\nNext payments:\n`+(up.slice(0,8).map(i=>`• ${fmtD(i.DueDate)} — ${peso(i.AmountDue)}`).join('\n')||'• None — fully paid. Salamat!');}
 
+/* ---------- 📸 loan statement as a photo (for Messenger) ---------- */
+const LOGO=new Image();LOGO.src='icon.png?v=2';
+function rrect(x,c,y,w,h,r){x.beginPath();x.moveTo(c+r,y);x.arcTo(c+w,y,c+w,y+h,r);x.arcTo(c+w,y+h,c,y+h,r);x.arcTo(c,y+h,c,y,r);x.arcTo(c,y,c+w,y,r);x.closePath();}
+function fullD(iso){if(!iso)return '—';const[y,m,d]=String(iso).split('-').map(Number);return m?`${MON[m-1]} ${d}, ${y}`:iso;}
+async function loanPhoto(id){
+  const l=S.loans.find(x=>x.LoanID===id);if(!l)return;const s=stats(l),p=partyOf(l.PartyID);
+  const W=1080,F='"Helvetica Neue",Helvetica,Arial,sans-serif',rowH=74,top=470,n=s.items.length,H=top+110+n*rowH+150;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;const x=cv.getContext('2d');
+  x.fillStyle='#f6f8f7';x.fillRect(0,0,W,H);
+  // header band
+  const g=x.createLinearGradient(0,0,W,260);g.addColorStop(0,'#0f9d6b');g.addColorStop(1,'#0b7a53');x.fillStyle=g;rrect(x,0,-40,W,300,40);x.fill();
+  try{if(LOGO.complete&&LOGO.naturalWidth)x.drawImage(LOGO,60,52,96,96);}catch(e){}
+  x.fillStyle='#fff';x.font=`800 46px ${F}`;x.fillText('Statement of Account',180,96);
+  x.font=`500 26px ${F}`;x.globalAlpha=.85;x.fillText('As of '+fullD(S.today),180,138);x.globalAlpha=1;
+  x.font=`800 40px ${F}`;x.fillText(p.Name||'—',60,215);
+  x.font=`500 24px ${F}`;x.textAlign='right';x.fillText(`${l.LoanID}${l.Purpose?' · '+l.Purpose:''}`,W-60,215);x.textAlign='left';
+  // summary cards
+  const cards=[['TOTAL',s.total,'#14221c'],['PAID',s.paid,'#0b7a53'],['BALANCE',s.left,s.odCount?'#d6453d':'#14221c']],cw=(W-120-40)/3;
+  cards.forEach(([t,v,col],i)=>{const cx=60+i*(cw+20);x.shadowColor='rgba(20,34,28,.12)';x.shadowBlur=24;x.shadowOffsetY=8;x.fillStyle='#fff';rrect(x,cx,290,cw,140,24);x.fill();x.shadowColor='transparent';
+    x.fillStyle='#6b7b73';x.font=`700 20px ${F}`;x.fillText(t,cx+26,334);x.fillStyle=col;x.font=`800 38px ${F}`;x.fillText(peso(v),cx+26,394);});
+  // table
+  x.shadowColor='rgba(20,34,28,.10)';x.shadowBlur=24;x.shadowOffsetY=8;x.fillStyle='#fff';rrect(x,40,top,W-80,90+n*rowH,28);x.fill();x.shadowColor='transparent';
+  const C=[80,150,430,640,860];x.fillStyle='#6b7b73';x.font=`700 19px ${F}`;['#','DUE DATE','AMOUNT','STATUS','PAID ON'].forEach((h,i)=>x.fillText(h,C[i],top+52));
+  s.items.forEach((it,i)=>{const y=top+90+i*rowH;
+    if(i%2===0){x.fillStyle='#f7faf8';x.fillRect(48,y,W-96,rowH);}
+    const[k,t]=status(it);const col=k==='ok'?'#0b7a53':k==='late'?'#d6453d':k==='soon'?'#d98a0b':'#6b7b73',bg=k==='ok'?'#e6f6ef':k==='late'?'#fdeceb':k==='soon'?'#fff3dc':'#eef2f0';
+    x.fillStyle='#6b7b73';x.font=`600 24px ${F}`;x.fillText(String(it.InstallmentNo),C[0],y+46);
+    x.fillStyle='#14221c';x.font=`600 25px ${F}`;x.fillText(fullD(it.DueDate),C[1],y+46);
+    x.font=`700 25px ${F}`;x.fillText(peso(it.AmountDue),C[2],y+46);
+    const label=it.IsPaid?'✓ Paid':t;x.font=`700 20px ${F}`;const pw=x.measureText(label).width+30;x.fillStyle=bg;rrect(x,C[3],y+18,pw,38,19);x.fill();x.fillStyle=col;x.fillText(label,C[3]+15,y+44);
+    x.fillStyle='#6b7b73';x.font=`500 23px ${F}`;x.fillText(it.IsPaid?fullD(it.PaidDate||it.DueDate):'—',C[4],y+46);
+  });
+  // footer
+  const fy=top+90+n*rowH+70;x.fillStyle='#6b7b73';x.font=`500 22px ${F}`;x.textAlign='center';
+  x.fillText(`${s.items.filter(i=>i.IsPaid).length} of ${n} payments made · Balance ${peso(s.left)}`,W/2,fy);x.font=`500 19px ${F}`;x.globalAlpha=.7;x.fillText('Generated by Loan Tracker',W/2,fy+38);x.globalAlpha=1;x.textAlign='left';
+  const name=`${l.LoanID}-${String(p.Name||'loan').replace(/[^\w]+/g,'_')}-${S.today}.png`;
+  const url=cv.toDataURL('image/png');
+  try{
+    const blob=await (await fetch(url)).blob();const file=new File([blob],name,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'Statement · '+(p.Name||'')});return;}
+  }catch(e){if(e&&e.name==='AbortError')return;}
+  showPhoto(url,name);
+}
+function showPhoto(url,name){
+  let m=document.getElementById('mPhoto');
+  if(!m){m=document.createElement('div');m.className='scrim';m.id='mPhoto';m.innerHTML='<div class="modal" style="max-width:560px"><h3>📸 Statement photo</h3><div class="pmeta" style="margin-bottom:10px">On iPhone: press and hold the picture → <b>Save to Photos</b> or <b>Share</b> → Messenger.</div><img id="phImg" style="width:100%;border-radius:14px;box-shadow:var(--sh)"><div class="actions"><button class="mini" data-close>Close</button><a class="solid-btn" id="phDl" style="text-decoration:none">Download</a></div></div>';document.body.appendChild(m);}
+  m.querySelector('#phImg').src=url;const a=m.querySelector('#phDl');a.href=url;a.download=name;openM('#mPhoto');
+}
+
 /* ---------- proofs ---------- */
 function proofBtn(p,withRemove){
   if(!p)return '';
@@ -437,6 +519,7 @@ document.addEventListener('click',async e=>{
   if(d.toggle){const c=t.closest('.loan'),b=c.querySelector('.lbody');if(openLoans.has(d.toggle)){openLoans.delete(d.toggle);c.classList.remove('open');b.style.maxHeight=0;}else{openLoans.add(d.toggle);c.classList.add('open');b.style.maxHeight=b.scrollHeight+'px';}return;}
   if(d.pay){const on=d.paid==='1';t.classList.add('busy');return act('setPaid',{id:d.pay,paid:!on,date:todayISO()},on?'Marked unpaid':'Payment recorded ✓');}
   if(d.delline){if(confirm('Delete this line (and its payment, if any)?'))act('deleteLine',{id:d.delline},'Line deleted');return;}
+  if(d.photo){return loanPhoto(d.photo);}
   if(d.proof){return pickProof(d.proof);}
   if(d.unproof){if(confirm('Detach this proof? (The file stays in your Google Drive.)'))act('removeProof',{paymentId:d.unproof},'Proof detached');return;}
   if(d.delpay){if(confirm('Delete this payment?'))act('deletePayment',{id:d.delpay},'Payment deleted');return;}
@@ -452,7 +535,7 @@ document.addEventListener('click',async e=>{
     case 'btnSettings':return openSettings();
     case 'btnRefresh':return load();
     case 'btnDemo':mode='demo';D=null;closeM();return load();
-    case 'btnLogout':store.del('lt2_url');store.del('lt2_pin');cfg={url:API_URL,pin:''};mode='none';closeM();$('#sub').textContent='Not connected';return render();
+    case 'btnLogout':store.del('lt2_url');store.del('lt2_pin');store.del(CACHE_KEY);cfg={url:API_URL,pin:''};mode='none';closeM();$('#sub').textContent='Not connected';return render();
     case 'saveSet':{const u=$('#sU').value.trim(),p=$('#sP').value;if(!/^https:\/\/script\.google\.com\//.test(u))return toast('Paste the Apps Script /exec link');if(p.length<4)return toast('PIN needs at least 4 characters');cfg={url:u,pin:p};store.set('lt2_url',u);store.set('lt2_pin',p);mode='live';closeM();return load();}
     case 'saveLoan':return saveLoan();
     case 'savePay':{const a=+$('#yA').value;if(!a||!$('#yD').value)return toast('Fill date and amount');closeM();return act('addPayment',{loanId:payFor,date:$('#yD').value,amount:a,remark:$('#yR').value},'Payment saved ✓');}
